@@ -77,7 +77,7 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      # Build & Push Images with :staging and :latest tags
+      # Build & Push Images with both :staging and :latest tags
       - name: Build & Push Customer Service
         run: |
           docker build -t sit722acremmalu.azurecr.io/customer_service:staging -t sit722acremmalu.azurecr.io/customer_service:latest ./backend/customer_service
@@ -118,7 +118,7 @@ jobs:
         run: |
           az aks get-credentials \
             --resource-group sit722-staging-rg \
-            --name sit722StagingCluster \
+            --name sit722-aks-staging \
             --overwrite-existing
 
       - name: Create Image Pull Secret
@@ -158,8 +158,8 @@ jobs:
       - name: Connect to Production AKS
         run: |
           az aks get-credentials \
-            --resource-group sit722-rg \        # ✅ replace with your actual prod RG
-            --name sit722-aks-prod \            # ✅ replace with your actual prod AKS cluster name
+            --resource-group sit722-rg \
+            --name sit722-aks-prod \
             --overwrite-existing
 
       - name: Create/Update Image Pull Secret

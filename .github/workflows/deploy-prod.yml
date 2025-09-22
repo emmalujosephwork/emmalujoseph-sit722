@@ -9,18 +9,14 @@ jobs:
   deploy-prod:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Log in to Azure
-        uses: azure/login@v1
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Connect to AKS
-        run: |
-          az aks get-credentials --resource-group SIT722-RG --name SIT722-Prod
+      - name: Connect to Prod AKS
+        run: az aks get-credentials --resource-group sit722-rg --name sit722-aks-prod
 
-      - name: Deploy to production
-        run: |
-          kubectl apply -f k8s/
+      - name: Deploy to Prod
+        run: kubectl apply -f k8s/

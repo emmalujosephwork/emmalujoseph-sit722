@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: customer-deployment
+  namespace: staging
+  labels:
+    app: customer
 spec:
   replicas: 1
   selector:
@@ -13,7 +16,16 @@ spec:
         app: customer
     spec:
       containers:
-      - name: customer
-        image: emmalujoseph/customer-service:latest
-        ports:
-        - containerPort: 8000
+        - name: customer-service
+          image: sit722acremmalu.azurecr.io/customer_service:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+      imagePullSecrets:
+        - name: acr-secret

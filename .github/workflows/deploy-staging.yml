@@ -1,35 +1,58 @@
 name: Deploy to Staging
 
 on:
-  workflow_dispatch:   # Trigger manually after CI succeeds
+  workflow_run:
+    workflows: ["CI Pipeline"]   # Runs after CI Pipeline completes
+    types: [completed]
 
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
 
-      - name: Log in to Azure
-        uses: azure/login@v1
+    steps:
+      # Checkout source code
+      - uses: actions/checkout@v3
+
+      # Login to Azure using GitHub secret
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Set up AKS staging
+      # Create resource group (safe if it already exists)
+      - name: Ensure Resource Group Exists
         run: |
-          az aks create --resource-group SIT722-RG --name SIT722-Staging --node-count 1 --enable-addons monitoring --generate-ssh-keys
-          az aks get-credentials --resource-group SIT722-RG --name SIT722-Staging
+          az group create --name sit722-staging-rg --location australiaeast
 
-      - name: Deploy to staging
+      # Create AKS cluster if not exists, otherwise reuse
+      - name: Create or Reuse Staging Cluster
         run: |
-          kubectl apply -f k8s/
+          if ! az aks show --name sit722-aks-staging --resource-group sit722-staging-rg &>/dev/null; then
+            echo "Creating new AKS staging cluster..."
+            az aks create \
+              --resource-group sit722-staging-rg \
+              --name sit722-aks-staging \
+              --node-vm-size Standard_B2s \
+              --node-count 1 \
+              --generate-ssh-keys
+          else
+            echo "Staging cluster already exists. Skipping creation."
+          fi
 
-      - name: Run acceptance tests
-        run: |
-          echo "Running basic smoke tests..."
-          kubectl get pods
+      # Get kubeconfig for kubectl
+      - name: Get AKS Credentials
+        run: az aks get-credentials --resource-group sit722-staging-rg --name sit722-aks-staging --overwrite-existing
 
-      - name: Tear down staging
+      # Deploy Kubernetes manifests
+      - name: Deploy to Staging
+        run: kubectl apply -f k8s/
+
+      # Run trivial smoke test
+      - name: Smoke Test
+        run: kubectl get pods -o wide
+
+      # Optionally destroy staging cluster after tests
+      - name: Delete Staging Cluster
         if: always()
         run: |
-          az aks delete --name SIT722-Staging --resource-group SIT722-RG --yes --no-wait
+          echo "Cleaning up staging environment..."
+          az aks delete --name sit722-aks-staging --resource-group sit722-staging-rg --yes --no-wait

@@ -2,30 +2,57 @@ name: Deploy to Staging
 
 on:
   workflow_run:
-    workflows: ["CI Pipeline"]
+    workflows: ["CI Pipeline"]   # Runs after CI Pipeline completes
     types: [completed]
 
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
+
     steps:
+      # Checkout source code
       - uses: actions/checkout@v3
 
+      # Login to Azure using GitHub secret
       - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Create Staging Cluster
+      # Create resource group (safe if it already exists)
+      - name: Ensure Resource Group Exists
         run: |
-          az aks create --resource-group sit722-rg --name sit722-aks-staging --node-count 1 --enable-addons monitoring --generate-ssh-keys
-          az aks get-credentials --resource-group sit722-rg --name sit722-aks-staging
+          az group create --name sit722-staging-rg --location australiaeast
 
+      # Create AKS cluster if not exists, otherwise reuse
+      - name: Create or Reuse Staging Cluster
+        run: |
+          if ! az aks show --name sit722-aks-staging --resource-group sit722-staging-rg &>/dev/null; then
+            echo "Creating new AKS staging cluster..."
+            az aks create \
+              --resource-group sit722-staging-rg \
+              --name sit722-aks-staging \
+              --node-vm-size Standard_B2s \
+              --node-count 1 \
+              --generate-ssh-keys
+          else
+            echo "Staging cluster already exists. Skipping creation."
+          fi
+
+      # Get kubeconfig for kubectl
+      - name: Get AKS Credentials
+        run: az aks get-credentials --resource-group sit722-staging-rg --name sit722-aks-staging --overwrite-existing
+
+      # Deploy Kubernetes manifests
       - name: Deploy to Staging
         run: kubectl apply -f k8s/
 
+      # Run trivial smoke test
       - name: Smoke Test
-        run: kubectl get pods
+        run: kubectl get pods -o wide
 
+      # Optionally destroy staging cluster after tests
       - name: Delete Staging Cluster
         if: always()
-        run: az aks delete --name sit722-aks-staging --resource-group sit722-rg --yes --no-wait
+        run: |
+          echo "Cleaning up staging environment..."
+          az aks delete --name sit722-aks-staging --resource-group sit722-staging-rg --yes --no-wait

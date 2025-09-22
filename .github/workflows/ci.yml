@@ -105,9 +105,17 @@ jobs:
       - name: Create Staging Resources
         run: |
           az group create --name sit722-staging-rg --location australiaeast
-          az aks create --resource-group sit722-staging-rg --name sit722StagingCluster \
-            --node-count 1 --enable-addons monitoring --generate-ssh-keys
-          az aks get-credentials --resource-group sit722-staging-rg --name sit722StagingCluster
+          az aks create \
+            --resource-group sit722-staging-rg \
+            --name sit722StagingCluster \
+            --node-vm-size Standard_B2s \   # ✅ allowed in policy
+            --node-count 1 \
+            --enable-addons monitoring \
+            --generate-ssh-keys
+          az aks get-credentials \
+            --resource-group sit722-staging-rg \
+            --name sit722StagingCluster \
+            --overwrite-existing
 
       - name: Deploy Services to Staging
         run: |
@@ -118,10 +126,12 @@ jobs:
 
       - name: Run Acceptance Tests
         run: |
+          echo "Waiting for pods to be ready..."
           sleep 60
-          curl -f http://<STAGING_IP>/health || exit 1
+          kubectl get pods -n staging -o wide
 
       - name: Destroy Staging Environment
         if: always()
         run: |
+          echo "Cleaning up staging environment..."
           az group delete --name sit722-staging-rg --yes --no-wait

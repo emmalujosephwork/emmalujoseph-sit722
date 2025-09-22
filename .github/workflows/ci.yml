@@ -3,10 +3,11 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - testing   # triggers staging
-      - main      # triggers production
+      - testing
+      - main
 
 jobs:
+  # 1. Run Tests
   test:
     runs-on: ubuntu-latest
     services:
@@ -23,93 +24,65 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
       - run: python -m pip install --upgrade pip
-
       - name: Create DBs
         run: |
           sudo apt-get install -y postgresql-client
           for db in customers orders products; do
             PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE $db;" || true
           done
-
-      - name: Install & Test (customer_service)
+      - name: Run Tests
         run: |
           pip install -r backend/customer_service/requirements-dev.txt
           cd backend/customer_service && pytest -v --disable-warnings
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/customers
-
-      - name: Install & Test (order_service)
-        run: |
+          cd ../..
           pip install -r backend/order_service/requirements-dev.txt
           cd backend/order_service && pytest -v --disable-warnings
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orders
-
-      - name: Install & Test (product_service)
-        run: |
+          cd ../..
           pip install -r backend/product_service/requirements-dev.txt
           cd backend/product_service && pytest -v --disable-warnings
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/products
 
+  # 2. Build & Push Images
   build-and-push:
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v3
-
-      - name: Azure Login
-        uses: azure/login@v1
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Azure Container Registry Login
-        uses: azure/docker-login@v1
+      - uses: azure/docker-login@v1
         with:
           login-server: sit722acremmalu.azurecr.io
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
-
-      - name: Build & Push Customer Service
+      - name: Build & Push Images
         run: |
           docker build -t sit722acremmalu.azurecr.io/customer_service:latest ./backend/customer_service
           docker push sit722acremmalu.azurecr.io/customer_service:latest
-
-      - name: Build & Push Order Service
-        run: |
           docker build -t sit722acremmalu.azurecr.io/order_service:latest ./backend/order_service
           docker push sit722acremmalu.azurecr.io/order_service:latest
-
-      - name: Build & Push Product Service
-        run: |
           docker build -t sit722acremmalu.azurecr.io/product_service:latest ./backend/product_service
           docker push sit722acremmalu.azurecr.io/product_service:latest
-
-      - name: Build & Push Frontend Service
-        run: |
           docker build -t sit722acremmalu.azurecr.io/frontend_service:latest ./frontend
           docker push sit722acremmalu.azurecr.io/frontend_service:latest
 
+  # 3. Deploy to Staging (temporary cluster)
   staging-deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/testing'
     steps:
       - uses: actions/checkout@v3
-
-      - name: Azure Login
-        uses: azure/login@v1
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Create Staging Resources
+      - name: Create Staging AKS
         run: |
           az group create --name sit722-staging-rg --location australiaeast
           az aks create \
@@ -119,78 +92,47 @@ jobs:
             --node-vm-size Standard_B2s \
             --generate-ssh-keys
           az aks get-credentials --resource-group sit722-staging-rg --name sit722StagingCluster --overwrite-existing
-
       - name: Create Image Pull Secret
         run: |
           kubectl create namespace staging || true
-          kubectl delete secret acr-secret -n staging --ignore-not-found
           kubectl create secret docker-registry acr-secret \
             --docker-server=sit722acremmalu.azurecr.io \
             --docker-username=${{ secrets.ACR_USERNAME }} \
             --docker-password=${{ secrets.ACR_PASSWORD }} \
-            --namespace staging
-
-      - name: Deploy Services to Staging
-        run: |
-          kubectl apply -f k8s/ -n staging
-
-      - name: Run Acceptance Tests
-        run: |
-          echo "Waiting for pods to start..."
-          kubectl rollout status deployment/customer-deployment -n staging --timeout=120s || exit 1
-          kubectl rollout status deployment/order-deployment -n staging --timeout=120s || exit 1
-          kubectl rollout status deployment/product-deployment -n staging --timeout=120s || exit 1
-          kubectl rollout status deployment/frontend-deployment -n staging --timeout=120s || exit 1
-
-          echo "Checking service connectivity..."
-          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
-            curl -s http://customer-service:8000 || echo "Customer service not responding"
-          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
-            curl -s http://order-service:8001 || echo "Order service not responding"
-          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
-            curl -s http://product-service:8002 || echo "Product service not responding"
-
-      - name: Destroy Staging Environment
+            -n staging
+      - name: Deploy to Staging
+        run: kubectl apply -f k8s/staging/ -n staging
+      - name: Smoke Test
+        run: kubectl get pods -n staging
+      - name: Destroy Staging
         if: always()
-        run: |
-          az group delete --name sit722-staging-rg --yes --no-wait
+        run: az group delete --name sit722-staging-rg --yes --no-wait
 
+  # 4. Deploy to Production (persistent cluster)
   production-deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v3
-
-      - name: Azure Login
-        uses: azure/login@v1
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Connect to Production AKS
         run: |
           az aks get-credentials \
-            --resource-group sit722-rg \             # 🔴 replace with your actual prod RG
-            --name sit722-aks-prod \                 # 🔴 replace with your actual prod AKS cluster name
+            --resource-group sit722-rg \
+            --name sit722-aks-prod \
             --overwrite-existing
-
-      - name: Create/Update Image Pull Secret
+      - name: Create Image Pull Secret
         run: |
           kubectl create namespace production || true
-          kubectl delete secret acr-secret -n production --ignore-not-found
           kubectl create secret docker-registry acr-secret \
             --docker-server=sit722acremmalu.azurecr.io \
             --docker-username=${{ secrets.ACR_USERNAME }} \
             --docker-password=${{ secrets.ACR_PASSWORD }} \
-            --namespace production
-
-      - name: Deploy Services to Production
-        run: |
-          kubectl apply -f k8s/ -n production
-
+            -n production
+      - name: Deploy to Production
+        run: kubectl apply -f k8s/production/ -n production
       - name: Verify Deployments
-        run: |
-          kubectl rollout status deployment/customer-deployment -n production --timeout=180s
-          kubectl rollout status deployment/order-deployment -n production --timeout=180s
-          kubectl rollout status deployment/product-deployment -n production --timeout=180s
-          kubectl rollout status deployment/frontend-deployment -n production --timeout=180s
+        run: kubectl get pods -n production

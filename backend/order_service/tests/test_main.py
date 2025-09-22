@@ -1,9 +1,7 @@
 import logging
 import time
-import httpx
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
-
 import pytest
 from app.db import SessionLocal, engine, get_db
 from app.main import PRODUCT_SERVICE_URL, app

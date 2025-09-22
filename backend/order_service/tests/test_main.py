@@ -1,5 +1,6 @@
 import logging
 import time
+import httpx
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 

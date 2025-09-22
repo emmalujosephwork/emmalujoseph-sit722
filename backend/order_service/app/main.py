@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+import httpx
 from decimal import Decimal
 from typing import List, Optional
 

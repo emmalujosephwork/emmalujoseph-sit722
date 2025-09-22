@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: CI Pipeline - Build & Push to ACR
 
 on:
   push:
@@ -6,47 +6,67 @@ on:
       - testing
 
 jobs:
-  test-build-push:
+  build-and-test:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Install Python (for backend services tests)
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      # Run tests for backend services
+      - name: Install dependencies & run tests (customer_service)
         run: |
-          pip install -r backend/customer_service/requirements.txt
-          pip install -r backend/order_service/requirements.txt
-          pip install -r backend/product_service/requirements.txt
+          cd backend/customer_service
+          pip install -r requirements.txt
+          pytest || exit 1
 
-      - name: Run tests
+      - name: Install dependencies & run tests (order_service)
         run: |
-          pytest backend/customer_service/tests
-          pytest backend/order_service/tests
-          pytest backend/product_service/tests
+          cd backend/order_service
+          pip install -r requirements.txt
+          pytest || exit 1
 
+      - name: Install dependencies & run tests (product_service)
+        run: |
+          cd backend/product_service
+          pip install -r requirements.txt
+          pytest || exit 1
+
+      # Login to Azure
       - name: Log in to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Log in to ACR
       - name: Log in to ACR
-        run: echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
-
-      - name: Build and push images
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/customer-service:latest ./backend/customer_service
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/customer-service:latest
+          echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} \
+            -u ${{ secrets.ACR_USERNAME }} --password-stdin
 
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/order-service:latest ./backend/order_service
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/order-service:latest
+      # Build & push images
+      - name: Build & push backend/customer_service
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/customer_service:${{ github.sha }} ./backend/customer_service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/customer_service:${{ github.sha }}
 
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/product-service:latest ./backend/product_service
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/product-service:latest
+      - name: Build & push backend/order_service
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/order_service:${{ github.sha }} ./backend/order_service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/order_service:${{ github.sha }}
 
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest ./frontend
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
+      - name: Build & push backend/product_service
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/product_service:${{ github.sha }} ./backend/product_service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/product_service:${{ github.sha }}
+
+      - name: Build & push frontend
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }} ./frontend
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}

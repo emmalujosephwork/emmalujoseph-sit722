@@ -93,7 +93,7 @@ jobs:
 
       - name: Build & Push Frontend Service
         run: |
-          docker build -t sit722acremmalu.azurecr.io/frontend_service:latest ./frontend_service
+          docker build -t sit722acremmalu.azurecr.io/frontend_service:latest ./frontend
           docker push sit722acremmalu.azurecr.io/frontend_service:latest
 
   staging-deploy:

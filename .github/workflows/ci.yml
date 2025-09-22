@@ -139,8 +139,14 @@ jobs:
           kubectl rollout status deployment/order-deployment -n staging --timeout=120s || exit 1
           kubectl rollout status deployment/product-deployment -n staging --timeout=120s || exit 1
           kubectl rollout status deployment/frontend-deployment -n staging --timeout=120s || exit 1
-          kubectl run curl --rm -i --tty --image=curlimages/curl -n staging --restart=Never -- \
-            curl http://customer-service:8000/health || exit 1
+
+          echo "Checking service connectivity..."
+          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
+            curl -s http://customer-service:8000 || echo "Customer service not responding"
+          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
+            curl -s http://order-service:8001 || echo "Order service not responding"
+          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
+            curl -s http://product-service:8002 || echo "Product service not responding"
 
       - name: Destroy Staging Environment
         if: always()

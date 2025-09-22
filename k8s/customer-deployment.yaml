@@ -20,17 +20,12 @@ spec:
           image: sit722acremmalu.azurecr.io/customer_service:latest
           ports:
             - containerPort: 8000
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
       imagePullSecrets:
         - name: acr-secret

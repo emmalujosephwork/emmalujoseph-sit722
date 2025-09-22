@@ -19,7 +19,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: testdb
+          POSTGRES_DB: testdb   # default DB created at startup
         ports:
           - 5432:5432
         options: >-
@@ -40,29 +40,40 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
+      # ⬇️ CREATE required databases before tests
+      - name: Create databases for services
+        run: |
+          sudo apt-get install -y postgresql-client
+          PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE customers;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE orders;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE products;"
+
+      # Customer Service
       - name: Install dependencies (customer_service)
         run: pip install -r backend/customer_service/requirements-dev.txt
 
       - name: Run tests (customer_service)
         working-directory: backend/customer_service
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/customers
         run: pytest -v --disable-warnings
 
+      # Order Service
       - name: Install dependencies (order_service)
         run: pip install -r backend/order_service/requirements-dev.txt
 
       - name: Run tests (order_service)
         working-directory: backend/order_service
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orders
         run: pytest -v --disable-warnings
 
+      # Product Service
       - name: Install dependencies (product_service)
         run: pip install -r backend/product_service/requirements-dev.txt
 
       - name: Run tests (product_service)
         working-directory: backend/product_service
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/products
         run: pytest -v --disable-warnings

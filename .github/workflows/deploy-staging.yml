@@ -39,6 +39,14 @@ jobs:
             echo "Staging cluster already exists. Skipping creation."
           fi
 
+      # Wait until cluster is fully provisioned
+      - name: Wait for Cluster Readiness
+        run: |
+          az aks wait \
+            --resource-group sit722-staging-rg \
+            --name sit722-aks-staging \
+            --created
+
       # Connect kubectl to staging cluster
       - name: Get AKS Credentials
         run: |
@@ -84,7 +92,7 @@ jobs:
           echo "✅ Services:"
           kubectl get svc -n staging
 
-      # (Optional) Delete staging cluster manually, not automated
+      # Optional cleanup
       # - name: Delete Staging Cluster
       #   if: always()
       #   run: |

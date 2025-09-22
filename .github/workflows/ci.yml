@@ -114,6 +114,20 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # Ensure staging cluster exists
+      - name: Ensure Staging Cluster
+        run: |
+          if ! az aks show --name sit722-aks-staging --resource-group sit722-staging-rg &>/dev/null; then
+            echo "Creating staging cluster..."
+            az aks create \
+              --resource-group sit722-staging-rg \
+              --name sit722-aks-staging \
+              --node-vm-size Standard_B2s \
+              --node-count 1 \
+              --generate-ssh-keys
+          fi
+          az aks wait --resource-group sit722-staging-rg --name sit722-aks-staging --created
+
       - name: Connect to Staging AKS
         run: |
           az aks get-credentials \
@@ -129,11 +143,11 @@ jobs:
             --docker-server=sit722acremmalu.azurecr.io \
             --docker-username=${{ secrets.ACR_USERNAME }} \
             --docker-password=${{ secrets.ACR_PASSWORD }} \
-            --namespace staging
+            -n staging
 
       - name: Deploy to Staging
         run: |
-          kubectl apply -f k8s/staging/ -n staging
+          kubectl apply -f k8s/ -n staging
 
       - name: Run Acceptance Tests
         run: |
@@ -170,11 +184,11 @@ jobs:
             --docker-server=sit722acremmalu.azurecr.io \
             --docker-username=${{ secrets.ACR_USERNAME }} \
             --docker-password=${{ secrets.ACR_PASSWORD }} \
-            --namespace production
+            -n production
 
       - name: Deploy to Production
         run: |
-          kubectl apply -f k8s/production/ -n production
+          kubectl apply -f k8s/ -n production
 
       - name: Verify Production Deployments
         run: |

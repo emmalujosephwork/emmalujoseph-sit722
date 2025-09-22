@@ -114,20 +114,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Ensure staging cluster exists
-      - name: Ensure Staging Cluster
-        run: |
-          if ! az aks show --name sit722-aks-staging --resource-group sit722-staging-rg &>/dev/null; then
-            echo "Creating staging cluster..."
-            az aks create \
-              --resource-group sit722-staging-rg \
-              --name sit722-aks-staging \
-              --node-vm-size Standard_B2s \
-              --node-count 1 \
-              --generate-ssh-keys
-          fi
-          az aks wait --resource-group sit722-staging-rg --name sit722-aks-staging --created
-
       - name: Connect to Staging AKS
         run: |
           az aks get-credentials \
@@ -143,19 +129,28 @@ jobs:
             --docker-server=sit722acremmalu.azurecr.io \
             --docker-username=${{ secrets.ACR_USERNAME }} \
             --docker-password=${{ secrets.ACR_PASSWORD }} \
-            -n staging
+            --namespace staging
 
       - name: Deploy to Staging
         run: |
-          kubectl apply -f k8s/ -n staging
+          kubectl apply -f k8s/staging/customer-deployment.yaml -n staging
+          kubectl apply -f k8s/staging/customer-service.yaml -n staging
+          kubectl apply -f k8s/staging/order-deployment.yaml -n staging
+          kubectl apply -f k8s/staging/order-service.yaml -n staging
+          kubectl apply -f k8s/staging/product-deployment.yaml -n staging
+          kubectl apply -f k8s/staging/product-service.yaml -n staging
+          kubectl apply -f k8s/staging/frontend-deployment.yaml -n staging
+          kubectl apply -f k8s/staging/frontend-service.yaml -n staging
+          kubectl apply -f k8s/staging/ingress.yaml -n staging
 
       - name: Run Acceptance Tests
         run: |
-          echo "Waiting for pods..."
           kubectl rollout status deployment/customer-deployment -n staging --timeout=180s
           kubectl rollout status deployment/order-deployment -n staging --timeout=180s
           kubectl rollout status deployment/product-deployment -n staging --timeout=180s
           kubectl rollout status deployment/frontend-deployment -n staging --timeout=180s
+          kubectl get pods -n staging -o wide
+          kubectl get svc -n staging
 
   production-deploy:
     runs-on: ubuntu-latest
@@ -184,11 +179,19 @@ jobs:
             --docker-server=sit722acremmalu.azurecr.io \
             --docker-username=${{ secrets.ACR_USERNAME }} \
             --docker-password=${{ secrets.ACR_PASSWORD }} \
-            -n production
+            --namespace production
 
       - name: Deploy to Production
         run: |
-          kubectl apply -f k8s/ -n production
+          kubectl apply -f k8s/production/customer-deployment.yaml -n production
+          kubectl apply -f k8s/production/customer-service.yaml -n production
+          kubectl apply -f k8s/production/order-deployment.yaml -n production
+          kubectl apply -f k8s/production/order-service.yaml -n production
+          kubectl apply -f k8s/production/product-deployment.yaml -n production
+          kubectl apply -f k8s/production/product-service.yaml -n production
+          kubectl apply -f k8s/production/frontend-deployment.yaml -n production
+          kubectl apply -f k8s/production/frontend-service.yaml -n production
+          kubectl apply -f k8s/production/ingress.yaml -n production
 
       - name: Verify Production Deployments
         run: |
@@ -196,3 +199,5 @@ jobs:
           kubectl rollout status deployment/order-deployment -n production --timeout=180s
           kubectl rollout status deployment/product-deployment -n production --timeout=180s
           kubectl rollout status deployment/frontend-deployment -n production --timeout=180s
+          kubectl get pods -n production -o wide
+          kubectl get svc -n production

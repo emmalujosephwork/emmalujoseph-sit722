@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend-deployment
+  labels:
+    app: frontend
 spec:
   replicas: 1
   selector:
@@ -13,7 +15,7 @@ spec:
         app: frontend
     spec:
       containers:
-      - name: frontend
-        image: emmalujoseph/frontend:latest
-        ports:
-        - containerPort: 80
+        - name: frontend
+          image: sit722acremmalu.azurecr.io/frontend:latest
+          ports:
+            - containerPort: 3000

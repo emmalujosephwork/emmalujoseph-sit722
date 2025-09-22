@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: product-deployment
+  labels:
+    app: product
 spec:
   replicas: 1
   selector:
@@ -13,7 +15,7 @@ spec:
         app: product
     spec:
       containers:
-      - name: product
-        image: emmalujoseph/product-service:latest
-        ports:
-        - containerPort: 8000
+        - name: product-service
+          image: sit722acremmalu.azurecr.io/product_service:latest
+          ports:
+            - containerPort: 8002

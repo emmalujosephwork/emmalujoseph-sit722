@@ -1,0 +1,35 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:   # Trigger manually after CI succeeds
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up AKS staging
+        run: |
+          az aks create --resource-group SIT722-RG --name SIT722-Staging --node-count 1 --enable-addons monitoring --generate-ssh-keys
+          az aks get-credentials --resource-group SIT722-RG --name SIT722-Staging
+
+      - name: Deploy to staging
+        run: |
+          kubectl apply -f k8s/
+
+      - name: Run acceptance tests
+        run: |
+          echo "Running basic smoke tests..."
+          kubectl get pods
+
+      - name: Tear down staging
+        if: always()
+        run: |
+          az aks delete --name SIT722-Staging --resource-group SIT722-RG --yes --no-wait

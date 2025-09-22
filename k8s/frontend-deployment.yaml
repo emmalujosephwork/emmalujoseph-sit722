@@ -15,7 +15,21 @@ spec:
         app: frontend
     spec:
       containers:
-        - name: frontend
-          image: sit722acremmalu.azurecr.io/frontend:latest
+        - name: frontend-service
+          image: sit722acremmalu.azurecr.io/frontend_service:latest
           ports:
-            - containerPort: 3000
+            - containerPort: 80
+      imagePullSecrets:
+        - name: acr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

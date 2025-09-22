@@ -34,7 +34,7 @@ jobs:
         run: |
           sudo apt-get install -y postgresql-client
           for db in customers orders products; do
-            PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE $db;"
+            PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE $db;" || true
           done
 
       - name: Install & Test (customer_service)
@@ -110,7 +110,8 @@ jobs:
             --name sit722StagingCluster \
             --node-count 1 \
             --node-vm-size Standard_B2s \
-            --generate-ssh-keys
+            --generate-ssh-keys \
+            --attach-acr sit722acremmalu
           az aks get-credentials --resource-group sit722-staging-rg --name sit722StagingCluster --overwrite-existing
 
       - name: Create Image Pull Secret
@@ -129,9 +130,10 @@ jobs:
 
       - name: Run Acceptance Tests
         run: |
-          sleep 60
-          kubectl get pods -n staging
-          kubectl run curl --rm -i --tty --image=curlimages/curl -n staging --restart=Never -- curl http://customer-service:8000/health || exit 1
+          echo "Waiting for pods..."
+          kubectl rollout status deployment/customer-deployment -n staging --timeout=120s || exit 1
+          kubectl run curl --rm -i --tty --image=curlimages/curl -n staging --restart=Never -- \
+            curl http://customer-service:8000/health || exit 1
 
       - name: Destroy Staging Environment
         if: always()

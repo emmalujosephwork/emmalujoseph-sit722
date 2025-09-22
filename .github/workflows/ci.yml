@@ -1,4 +1,4 @@
-name: CI Pipeline - Build & Push to ACR
+name: CI Pipeline - Stage 1
 
 on:
   push:
@@ -6,67 +6,75 @@ on:
       - testing
 
 jobs:
-  build-and-test:
+  test-and-build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      # Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      # Install Python (for backend services tests)
+      # Set up Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      # Run tests for backend services
-      - name: Install dependencies & run tests (customer_service)
+      # Install deps + run tests for customer_service
+      - name: Run tests (customer_service)
         run: |
           cd backend/customer_service
           pip install -r requirements.txt
+          pip install pytest
           pytest || exit 1
+          cd ../..
 
-      - name: Install dependencies & run tests (order_service)
+      # Install deps + run tests for order_service
+      - name: Run tests (order_service)
         run: |
           cd backend/order_service
           pip install -r requirements.txt
+          pip install pytest
           pytest || exit 1
+          cd ../..
 
-      - name: Install dependencies & run tests (product_service)
+      # Install deps + run tests for product_service
+      - name: Run tests (product_service)
         run: |
           cd backend/product_service
           pip install -r requirements.txt
+          pip install pytest
           pytest || exit 1
-
-      # Login to Azure
-      - name: Log in to Azure
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          cd ../..
 
       # Log in to ACR
-      - name: Log in to ACR
-        run: |
-          echo ${{ secrets.ACR_PASSWORD }} | docker login ${{ secrets.ACR_LOGIN_SERVER }} \
-            -u ${{ secrets.ACR_USERNAME }} --password-stdin
+      - name: Log in to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
-      # Build & push images
-      - name: Build & push backend/customer_service
+      # Build & push customer_service image
+      - name: Build & push customer_service image
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/customer_service:${{ github.sha }} ./backend/customer_service
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/customer_service:${{ github.sha }}
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/customer_service:latest ./backend/customer_service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/customer_service:latest
 
-      - name: Build & push backend/order_service
+      # Build & push order_service image
+      - name: Build & push order_service image
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/order_service:${{ github.sha }} ./backend/order_service
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/order_service:${{ github.sha }}
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/order_service:latest ./backend/order_service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/order_service:latest
 
-      - name: Build & push backend/product_service
+      # Build & push product_service image
+      - name: Build & push product_service image
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/product_service:${{ github.sha }} ./backend/product_service
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/product_service:${{ github.sha }}
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/product_service:latest ./backend/product_service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/product_service:latest
 
-      - name: Build & push frontend
+      # Build & push frontend image
+      - name: Build & push frontend image
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }} ./frontend
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest ./frontend
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest

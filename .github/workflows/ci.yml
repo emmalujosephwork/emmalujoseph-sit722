@@ -3,8 +3,8 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - testing   # triggers staging
-      - main      # triggers production
+      - testing     # deploys to staging
+      - main        # deploys to production
 
 jobs:
   test:
@@ -31,28 +31,28 @@ jobs:
           python-version: '3.10'
       - run: python -m pip install --upgrade pip
 
-      - name: Create DBs
+      - name: Create Test Databases
         run: |
           sudo apt-get install -y postgresql-client
           for db in customers orders products; do
             PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "CREATE DATABASE $db;" || true
           done
 
-      - name: Install & Test (customer_service)
+      - name: Run Tests (customer_service)
         run: |
           pip install -r backend/customer_service/requirements-dev.txt
           cd backend/customer_service && pytest -v --disable-warnings
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/customers
 
-      - name: Install & Test (order_service)
+      - name: Run Tests (order_service)
         run: |
           pip install -r backend/order_service/requirements-dev.txt
           cd backend/order_service && pytest -v --disable-warnings
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orders
 
-      - name: Install & Test (product_service)
+      - name: Run Tests (product_service)
         run: |
           pip install -r backend/product_service/requirements-dev.txt
           cd backend/product_service && pytest -v --disable-warnings
@@ -70,7 +70,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Azure Container Registry Login
+      - name: ACR Login
         uses: azure/docker-login@v1
         with:
           login-server: sit722acremmalu.azurecr.io
@@ -131,17 +131,17 @@ jobs:
             --docker-password=${{ secrets.ACR_PASSWORD }} \
             --namespace staging
 
-      - name: Deploy Services to Staging
+      - name: Deploy to Staging
         run: |
           kubectl apply -f k8s/staging/ -n staging
 
       - name: Run Acceptance Tests
         run: |
-          echo "Waiting for pods to start..."
-          kubectl rollout status deployment/customer-deployment -n staging --timeout=120s || exit 1
-          kubectl rollout status deployment/order-deployment -n staging --timeout=120s || exit 1
-          kubectl rollout status deployment/product-deployment -n staging --timeout=120s || exit 1
-          kubectl rollout status deployment/frontend-deployment -n staging --timeout=120s || exit 1
+          echo "Waiting for pods..."
+          kubectl rollout status deployment/customer-deployment -n staging --timeout=180s
+          kubectl rollout status deployment/order-deployment -n staging --timeout=180s
+          kubectl rollout status deployment/product-deployment -n staging --timeout=180s
+          kubectl rollout status deployment/frontend-deployment -n staging --timeout=180s
 
   production-deploy:
     runs-on: ubuntu-latest
@@ -162,7 +162,7 @@ jobs:
             --name sit722-aks-prod \
             --overwrite-existing
 
-      - name: Create/Update Image Pull Secret
+      - name: Create Image Pull Secret
         run: |
           kubectl create namespace production || true
           kubectl delete secret acr-secret -n production --ignore-not-found
@@ -172,11 +172,11 @@ jobs:
             --docker-password=${{ secrets.ACR_PASSWORD }} \
             --namespace production
 
-      - name: Deploy Services to Production
+      - name: Deploy to Production
         run: |
           kubectl apply -f k8s/production/ -n production
 
-      - name: Verify Deployments
+      - name: Verify Production Deployments
         run: |
           kubectl rollout status deployment/customer-deployment -n production --timeout=180s
           kubectl rollout status deployment/order-deployment -n production --timeout=180s

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: product-deployment
-  namespace: staging
+  namespace: production
   labels:
     app: product
 spec:

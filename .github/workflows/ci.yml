@@ -77,24 +77,29 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      # Build & Push Images with :staging and :latest tags
       - name: Build & Push Customer Service
         run: |
-          docker build -t sit722acremmalu.azurecr.io/customer_service:latest ./backend/customer_service
+          docker build -t sit722acremmalu.azurecr.io/customer_service:staging -t sit722acremmalu.azurecr.io/customer_service:latest ./backend/customer_service
+          docker push sit722acremmalu.azurecr.io/customer_service:staging
           docker push sit722acremmalu.azurecr.io/customer_service:latest
 
       - name: Build & Push Order Service
         run: |
-          docker build -t sit722acremmalu.azurecr.io/order_service:latest ./backend/order_service
+          docker build -t sit722acremmalu.azurecr.io/order_service:staging -t sit722acremmalu.azurecr.io/order_service:latest ./backend/order_service
+          docker push sit722acremmalu.azurecr.io/order_service:staging
           docker push sit722acremmalu.azurecr.io/order_service:latest
 
       - name: Build & Push Product Service
         run: |
-          docker build -t sit722acremmalu.azurecr.io/product_service:latest ./backend/product_service
+          docker build -t sit722acremmalu.azurecr.io/product_service:staging -t sit722acremmalu.azurecr.io/product_service:latest ./backend/product_service
+          docker push sit722acremmalu.azurecr.io/product_service:staging
           docker push sit722acremmalu.azurecr.io/product_service:latest
 
       - name: Build & Push Frontend Service
         run: |
-          docker build -t sit722acremmalu.azurecr.io/frontend_service:latest ./frontend
+          docker build -t sit722acremmalu.azurecr.io/frontend_service:staging -t sit722acremmalu.azurecr.io/frontend_service:latest ./frontend
+          docker push sit722acremmalu.azurecr.io/frontend_service:staging
           docker push sit722acremmalu.azurecr.io/frontend_service:latest
 
   staging-deploy:
@@ -109,16 +114,12 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Create Staging Resources
+      - name: Connect to Staging AKS
         run: |
-          az group create --name sit722-staging-rg --location australiaeast
-          az aks create \
+          az aks get-credentials \
             --resource-group sit722-staging-rg \
             --name sit722StagingCluster \
-            --node-count 1 \
-            --node-vm-size Standard_B2s \
-            --generate-ssh-keys
-          az aks get-credentials --resource-group sit722-staging-rg --name sit722StagingCluster --overwrite-existing
+            --overwrite-existing
 
       - name: Create Image Pull Secret
         run: |
@@ -132,7 +133,7 @@ jobs:
 
       - name: Deploy Services to Staging
         run: |
-          kubectl apply -f k8s/ -n staging
+          kubectl apply -f k8s/staging/ -n staging
 
       - name: Run Acceptance Tests
         run: |
@@ -141,19 +142,6 @@ jobs:
           kubectl rollout status deployment/order-deployment -n staging --timeout=120s || exit 1
           kubectl rollout status deployment/product-deployment -n staging --timeout=120s || exit 1
           kubectl rollout status deployment/frontend-deployment -n staging --timeout=120s || exit 1
-
-          echo "Checking service connectivity..."
-          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
-            curl -s http://customer-service:8000 || echo "Customer service not responding"
-          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
-            curl -s http://order-service:8001 || echo "Order service not responding"
-          kubectl run curl --rm --image=curlimages/curl -n staging --restart=Never -- \
-            curl -s http://product-service:8002 || echo "Product service not responding"
-
-      - name: Destroy Staging Environment
-        if: always()
-        run: |
-          az group delete --name sit722-staging-rg --yes --no-wait
 
   production-deploy:
     runs-on: ubuntu-latest
@@ -170,8 +158,8 @@ jobs:
       - name: Connect to Production AKS
         run: |
           az aks get-credentials \
-            --resource-group sit722-rg \             # 🔴 replace with your actual prod RG
-            --name sit722-aks-prod \                 # 🔴 replace with your actual prod AKS cluster name
+            --resource-group sit722-rg \        # ✅ replace with your actual prod RG
+            --name sit722-aks-prod \            # ✅ replace with your actual prod AKS cluster name
             --overwrite-existing
 
       - name: Create/Update Image Pull Secret
@@ -186,7 +174,7 @@ jobs:
 
       - name: Deploy Services to Production
         run: |
-          kubectl apply -f k8s/ -n production
+          kubectl apply -f k8s/production/ -n production
 
       - name: Verify Deployments
         run: |

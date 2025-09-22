@@ -3,8 +3,6 @@ kind: Deployment
 metadata:
   name: customer-deployment
   namespace: staging
-  labels:
-    app: customer
 spec:
   replicas: 1
   selector:
@@ -16,16 +14,12 @@ spec:
         app: customer
     spec:
       containers:
-        - name: customer-service
-          image: sit722acremmalu.azurecr.io/customer_service:latest
+        - name: customer
+          image: sit722acremmalu.azurecr.io/customer_service:staging
           ports:
             - containerPort: 8000
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "250m"
-              memory: "256Mi"
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://postgres:postgres@customer-db:5432/customers"
       imagePullSecrets:
         - name: acr-secret

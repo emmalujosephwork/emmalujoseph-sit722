@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend-deployment
-  namespace: staging
+  name: order-deployment
+  namespace: production
   labels:
-    app: frontend
+    app: order
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: frontend
+      app: order
   template:
     metadata:
       labels:
-        app: frontend
+        app: order
     spec:
       containers:
-        - name: frontend-service
-          image: sit722acremmalu.azurecr.io/frontend_service:latest
+        - name: order-service
+          image: sit722acremmalu.azurecr.io/order_service:latest
           ports:
-            - containerPort: 80
+            - containerPort: 8001
           resources:
             requests:
               cpu: "100m"
